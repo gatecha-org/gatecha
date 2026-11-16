@@ -25,7 +25,9 @@ test('signs in through the login captcha', async ({ page }) => {
   const widget = page.locator('altcha-widget')
   await expect(widget).toBeVisible()
   // Click the label like a visitor: the widget draws its own box over the input.
-  await widget.getByText("I'm not a robot").click()
+  // altcha 3.6.0 switched the label to a typographic apostrophe ("I’m"), so
+  // accept either one rather than pinning the widget's copy.
+  await widget.getByText(/I['’]m not a robot/).click()
   await expect(widget).toContainText('Verified', { timeout: 30_000 })
   await expect(widget).not.toContainText('Verification failed')
 
