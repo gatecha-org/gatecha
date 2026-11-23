@@ -167,11 +167,15 @@ func FailedAuthRateLimitMiddleware(requestsPerMinute int) func(http.Handler) htt
 // outbound IP, and a plain per-IP bucket made them throttle each other. Each
 // site now gets the full budget from that IP, and one site still cannot exceed
 // it. It must run after APIKeyMiddleware, so only real keys open a bucket.
+//
+// When the backend presented the key's verify secret along with `client_ip`,
+// the source is the visitor rather than the backend (see
+// TrustedClientIPMiddleware), so each visitor gets the budget.
 func SourceAndKeyRateLimitMiddleware(requestsPerMinute int) func(http.Handler) http.Handler {
 	limiter := newIPRateLimiter(requestsPerMinute)
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			bucket := clientIP(r)
+			bucket := sourceIP(r)
 			if key := GetAPIKeyFromContext(r); key != nil {
 				bucket += "|" + key.KeyID
 			}

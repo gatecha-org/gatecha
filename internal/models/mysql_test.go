@@ -237,3 +237,37 @@ func TestMySQL_StatsToken(t *testing.T) {
 		t.Errorf("revoked token: expected ErrStatsTokenNotFound, got %v", err)
 	}
 }
+
+// TestMySQL_VerifySecret mirrors TestMySQL_StatsToken for the second token
+// pair, which shares its storage code: NULLs in the unique verify_secret_hash
+// index, and a no-op revoke that MySQL reports as zero rows affected.
+func TestMySQL_VerifySecret(t *testing.T) {
+	db := testutil.SetupTestMySQL(t)
+
+	a, err := models.CreateAPIKey(db, "A", "", 0, 0, "")
+	if err != nil {
+		t.Fatalf("CreateAPIKey A: %v", err)
+	}
+	if _, err := models.CreateAPIKey(db, "B", "", 0, 0, ""); err != nil {
+		t.Fatalf("second key without a secret must not collide: %v", err)
+	}
+
+	secret, err := models.IssueVerifySecret(db, a.ID)
+	if err != nil {
+		t.Fatalf("IssueVerifySecret: %v", err)
+	}
+	loaded, err := models.GetAPIKeyByKeyID(db, a.KeyID)
+	if err != nil || !loaded.MatchesVerifySecret(secret) {
+		t.Fatalf("issued secret does not match the stored key: %v", err)
+	}
+
+	for i := range 2 {
+		if err := models.RevokeVerifySecret(db, a.ID); err != nil {
+			t.Fatalf("revoke #%d: %v", i+1, err)
+		}
+	}
+	loaded, _ = models.GetAPIKeyByKeyID(db, a.KeyID)
+	if loaded.HasVerifySecret() || loaded.MatchesVerifySecret(secret) {
+		t.Error("revoked secret still matches")
+	}
+}

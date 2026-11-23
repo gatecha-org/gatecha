@@ -99,6 +99,9 @@ func mountPublicAPI(r chi.Router, db *gorm.DB, cfg RouterConfig) {
 			r.Use(FailedAuthRateLimitMiddleware(cfg.RateLimitAPI))
 		}
 		r.Use(APIKeyMiddleware(db))
+		// A backend holding the key's verify secret may report the visitor's
+		// address, which the per-source limiter then counts instead of its own.
+		r.Use(TrustedClientIPMiddleware)
 		if cfg.RateLimitEnabled {
 			r.Use(SourceAndKeyRateLimitMiddleware(cfg.RateLimitAPI))
 		}
@@ -144,6 +147,8 @@ func mountAdminAPI(r chi.Router, db *gorm.DB, secretKey string, cfg RouterConfig
 		r.Post(keysIDRoute+"/rotate-secret", adminHandler.RotateSecret)
 		r.Post(keysIDRoute+"/stats-token", adminHandler.IssueStatsToken)
 		r.Delete(keysIDRoute+"/stats-token", adminHandler.RevokeStatsToken)
+		r.Post(keysIDRoute+"/verify-secret", adminHandler.IssueVerifySecret)
+		r.Delete(keysIDRoute+"/verify-secret", adminHandler.RevokeVerifySecret)
 
 		// MCP tokens (long-lived credentials for the MCP endpoint)
 		r.Get("/mcp-tokens", adminHandler.ListMCPTokens)

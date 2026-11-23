@@ -1,8 +1,6 @@
 package models
 
 import (
-	"crypto/rand"
-	"encoding/hex"
 	"errors"
 	"strings"
 	"time"
@@ -15,10 +13,6 @@ import (
 // anything) and from the gm_ MCP admin tokens.
 const StatsTokenPrefix = "gs_"
 
-// statsTokenDisplayLen mirrors mcpTokenDisplayLen: the prefix plus 8 hex
-// characters, enough to recognise a token without narrowing a search.
-const statsTokenDisplayLen = len(StatsTokenPrefix) + 8
-
 // StatsTokenMaxDays bounds the window a stats token can read.
 const StatsTokenMaxDays = 90
 
@@ -28,45 +22,19 @@ const statsTokenTopCountries = 10
 // ErrStatsTokenNotFound is returned when no key holds the presented token.
 var ErrStatsTokenNotFound = errors.New("stats token not found")
 
+// statsToken is the read-only stats credential's storage.
+var statsToken = keyToken{prefix: StatsTokenPrefix, hashCol: "stats_token_hash", displayCol: "stats_token_display"}
+
 // IssueStatsToken generates a new stats token for the key, replacing any
 // previous one, and returns the secret. It is shown once and unrecoverable
-// afterwards. The digest is the same SHA-256 the MCP tokens use, for the same
-// reason: 128 bits of CSPRNG output need no slow hash.
+// afterwards.
 func IssueStatsToken(db *gorm.DB, id int64) (string, error) {
-	b := make([]byte, 16)
-	if _, err := rand.Read(b); err != nil {
-		return "", err
-	}
-	secret := StatsTokenPrefix + hex.EncodeToString(b)
-	hash := HashMCPToken(secret)
-	res := db.Model(&APIKey{}).Where(byID, id).Updates(map[string]any{
-		"stats_token_hash":    hash,
-		"stats_token_display": secret[:statsTokenDisplayLen],
-	})
-	if res.Error != nil {
-		return "", res.Error
-	}
-	if res.RowsAffected == 0 {
-		return "", gorm.ErrRecordNotFound
-	}
-	return secret, nil
+	return statsToken.issue(db, id)
 }
 
-// RevokeStatsToken removes the key's stats token, if any. Existence is checked
-// apart from the update: MySQL reports a write that changes nothing (a key that
-// had no token) as zero rows affected, which is not a missing key.
+// RevokeStatsToken removes the key's stats token, if any.
 func RevokeStatsToken(db *gorm.DB, id int64) error {
-	var n int64
-	if err := db.Model(&APIKey{}).Where(byID, id).Count(&n).Error; err != nil {
-		return err
-	}
-	if n == 0 {
-		return gorm.ErrRecordNotFound
-	}
-	return db.Model(&APIKey{}).Where(byID, id).Updates(map[string]any{
-		"stats_token_hash":    nil,
-		"stats_token_display": "",
-	}).Error
+	return statsToken.revoke(db, id)
 }
 
 // GetAPIKeyByStatsToken returns the key a stats token belongs to. A disabled
