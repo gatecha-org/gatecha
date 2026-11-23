@@ -128,6 +128,46 @@ if resp.json().get('ok'):
     pass
 ```
 
+#### Passing the visitor's IP
+
+Called from your backend, `/verify` sees your server's address, not the visitor's.
+Two things follow: every visitor of the site shares one rate-limit bucket
+(`GATECHA_RATE_LIMIT_API`, 60 per minute by default), so a busy form starts
+answering `429` to real people; and the country breakdown shows where your server
+is hosted.
+
+To fix both, issue the key's **verify secret** from its page in the dashboard
+(shown once), then send it with the visitor's address in `client_ip`. The key ID
+moves to the query string, since the `Authorization` header now carries the secret:
+
+```python
+resp = requests.post(
+    'https://your-gatecha-host/api/v1/verify?apiKey=gk_your_key_id',
+    headers={'Authorization': 'Bearer gv_your_verify_secret'},
+    json={'payload': altcha_payload, 'client_ip': visitor_ip}
+)
+```
+
+- **The secret is what makes `client_ip` count.** The key ID is public, so without
+  the secret the field is ignored: otherwise anyone could change it on every
+  request and walk around the limiter.
+- **A wrong, replaced or revoked secret does not fail the verification.**
+  `client_ip` is ignored, the request is counted against your server's address as
+  before, and GateCHA logs a warning. Regenerating the secret is therefore not an
+  instant outage, but until the backend has the new one the site is back on the
+  shared bucket, and a busy form can see `429`s again. Update the backend right
+  after regenerating.
+- **The address is used and discarded.** It feeds the rate limiter and the country
+  lookup, and is never stored nor logged. A value that is not an IPv4 or IPv6
+  address is ignored.
+- **Take `visitor_ip` from where your own stack puts it, and only from a proxy
+  you trust.** Behind a reverse proxy that is usually a forwarded header
+  (`X-Forwarded-For`, `X-Real-IP`). Accept it only from your own proxy, and have
+  that proxy overwrite the header rather than append to what the client sent:
+  otherwise a visitor forges a new address on every request, your backend vouches
+  for it with the secret, and the per-visitor limit is gone. Without a proxy, use
+  the socket address.
+
 ### 4. Optional: collect interaction signals (HIS)
 
 Alongside the proof of work, GateCHA can score *how* a visitor interacted with the
@@ -279,7 +319,7 @@ Four things worth knowing before you switch it on:
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `GET` | `/api/v1/challenge` | Generate a PoW challenge |
-| `POST` | `/api/v1/verify` | Verify a solution |
+| `POST` | `/api/v1/verify` | Verify a solution. With the key's verify secret in `Authorization: Bearer gv_xxx`, honours `client_ip`, see [Passing the visitor's IP](#passing-the-visitors-ip) |
 
 ### Key statistics (stats token auth via `Authorization: Bearer gs_xxx`)
 
@@ -309,6 +349,7 @@ curl -H "Authorization: Bearer gs_your_stats_token" https://your-gatecha-host/ap
 | `GET/PUT/DELETE` | `/api/admin/keys/:id` | Manage API key |
 | `POST` | `/api/admin/keys/:id/rotate-secret` | Rotate HMAC secret |
 | `POST/DELETE` | `/api/admin/keys/:id/stats-token` | Issue (or replace) / revoke the key's stats token |
+| `POST/DELETE` | `/api/admin/keys/:id/verify-secret` | Issue (or replace) / revoke the key's verify secret |
 | `GET` | `/api/admin/stats/overview` | Global statistics |
 | `GET` | `/api/admin/stats/keys/:id` | Per-key statistics |
 | `GET` | `/healthz` | Health check |
@@ -450,7 +491,7 @@ The compose file pulls `latest-mysql`. Set `GATECHA_IMAGE` to run another image,
 | `GATECHA_MAX_BODY_BYTES` | `1048576` | Maximum accepted request body size, in bytes |
 | `GATECHA_RATE_LIMIT_ENABLED` | `true` | Enable per-IP rate limiting |
 | `GATECHA_RATE_LIMIT_LOGIN` | `5` | Admin login requests per minute, per IP |
-| `GATECHA_RATE_LIMIT_API` | `60` | Public API requests per minute: per IP on `/api/v1/challenge` and `/api/v1/stats`, per IP **and API key** on `/api/v1/verify`, so sites sharing a hosting provider's outbound IP each get the full budget |
+| `GATECHA_RATE_LIMIT_API` | `60` | Public API requests per minute: per IP on `/api/v1/challenge` and `/api/v1/stats`, per IP **and API key** on `/api/v1/verify`, so sites sharing a hosting provider's outbound IP each get the full budget. With the key's verify secret, `/verify` counts per visitor (`client_ip`) instead |
 
 > ⚠️ **Behind a reverse proxy, set `GATECHA_TRUST_PROXY=true`.**
 > Per-IP rate limiting keys off the connecting IP. With `GATECHA_TRUST_PROXY=false`

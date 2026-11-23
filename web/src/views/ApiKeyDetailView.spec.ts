@@ -34,6 +34,7 @@ const mockKey = {
   his_enforce: false,
   his_threshold: 0.8,
   stats_token_display: '',
+  verify_secret_display: '',
   enabled: true,
   created_at: '2026-01-01T00:00:00Z',
   updated_at: '2026-01-01T00:00:00Z',
@@ -294,5 +295,48 @@ describe('ApiKeyDetailView', () => {
 
     expect(mockApi.delete).toHaveBeenCalledWith('/keys/1/stats-token')
     expect(wrapper.text()).toContain('None')
+  })
+
+  it('generates a verify secret alongside the stats token, independently', async () => {
+    mockApi.post.mockResolvedValueOnce({ data: { verify_secret: 'gv_0123456789abcdef0123456789abcdef' } })
+    mockApi.get.mockResolvedValueOnce({ data: { ...mockKey, verify_secret_display: 'gv_01234567' } })
+
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('Verify secret')
+
+    // Stats token comes first; the second Generate is the verify secret's.
+    const generate = wrapper.findAll('button').filter(b => b.text() === 'Generate')
+    expect(generate).toHaveLength(2)
+    await generate[1]!.trigger('click')
+    await flushPromises()
+
+    expect(mockApi.post).toHaveBeenCalledWith('/keys/1/verify-secret')
+    expect(mockApi.post).not.toHaveBeenCalledWith('/keys/1/stats-token')
+    expect(wrapper.text()).toContain('gv_0123456789abcdef0123456789abcdef')
+    expect(wrapper.find('button[aria-label="Copy verify secret"]').exists()).toBe(true)
+  })
+
+  it('regenerates the verify secret only after confirmation', async () => {
+    mockApi.get
+      .mockReset()
+      .mockResolvedValueOnce({ data: { ...mockKey, verify_secret_display: 'gv_01234567' } })
+      .mockResolvedValueOnce({ data: { days: [] } })
+      .mockResolvedValueOnce({ data: { ...mockKey, verify_secret_display: 'gv_89abcdef' } })
+    mockApi.post.mockResolvedValueOnce({ data: { verify_secret: 'gv_89abcdef0123456789abcdef01234567' } })
+
+    const wrapper = mountView()
+    await flushPromises()
+    expect(wrapper.text()).toContain('gv_01234567…')
+
+    await wrapper.findAll('button').find(b => b.text() === 'Regenerate')!.trigger('click')
+    expect(mockApi.post).not.toHaveBeenCalled()
+    expect(wrapper.text()).toContain('Regenerate verify secret?')
+
+    await wrapper.findAll('dialog button').find(b => b.text() === 'Regenerate')!.trigger('click')
+    await flushPromises()
+
+    expect(mockApi.post).toHaveBeenCalledWith('/keys/1/verify-secret')
+    expect(wrapper.text()).toContain('gv_89abcdef0123456789abcdef01234567')
   })
 })

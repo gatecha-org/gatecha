@@ -58,10 +58,19 @@ type APIKey struct {
 	StatsTokenHash *string `gorm:"uniqueIndex;size:64" json:"-"`
 	// StatsTokenDisplay holds the token's leading characters so the dashboard
 	// can show which token is live after the secret itself is gone.
-	StatsTokenDisplay string    `gorm:"not null;default:''" json:"stats_token_display"`
-	Enabled           bool      `gorm:"not null;default:true" json:"enabled"`
-	CreatedAt         time.Time `json:"created_at"`
-	UpdatedAt         time.Time `json:"updated_at"`
+	StatsTokenDisplay string `gorm:"not null;default:''" json:"stats_token_display"`
+	// VerifySecretHash is the SHA-256 of the key's server-side verify secret
+	// (gv_). A backend that presents it on POST /verify is trusted to report
+	// the visitor's address in `client_ip`, which then feeds the rate limiter
+	// and the country lookup instead of the backend's own address. Never the
+	// HMAC secret: that one signs challenges and must not leave GateCHA. Nil
+	// when none was issued, for the same unique-index reason as above.
+	VerifySecretHash *string `gorm:"uniqueIndex;size:64" json:"-"`
+	// VerifySecretDisplay holds the secret's leading characters.
+	VerifySecretDisplay string    `gorm:"not null;default:''" json:"verify_secret_display"`
+	Enabled             bool      `gorm:"not null;default:true" json:"enabled"`
+	CreatedAt           time.Time `json:"created_at"`
+	UpdatedAt           time.Time `json:"updated_at"`
 }
 
 // DefaultHISThreshold mirrors his.BotSuspectThreshold. It is restated here

@@ -10,6 +10,7 @@ import CopyButton from '../components/CopyButton.vue'
 import StatusChip from '../components/StatusChip.vue'
 import { keyStatus, todayUTC } from '../lib/status'
 import ConfirmDialog from '../components/ConfirmDialog.vue'
+import KeyTokenField from '../components/KeyTokenField.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -71,36 +72,10 @@ async function handleRotateSecret() {
   }
 }
 
-// The stats token lets a site's backend (the WordPress plugin) read this key's
-// numbers. Its secret is shown once, right after it is issued; afterwards only
-// the display prefix comes back from the server.
-const newStatsToken = ref('')
-const statsTokenConfirm = ref<'reissue' | 'revoke' | null>(null)
-const statsTokenBusy = ref(false)
-
-async function issueStatsToken() {
-  if (statsTokenBusy.value) return
-  statsTokenBusy.value = true
-  try {
-    newStatsToken.value = await keysStore.issueStatsToken(keyId.value)
-    key.value = await keysStore.getKey(keyId.value)
-  } finally {
-    statsTokenBusy.value = false
-    statsTokenConfirm.value = null
-  }
-}
-
-async function revokeStatsToken() {
-  if (statsTokenBusy.value) return
-  statsTokenBusy.value = true
-  try {
-    await keysStore.revokeStatsToken(keyId.value)
-    newStatsToken.value = ''
-    key.value = await keysStore.getKey(keyId.value)
-  } finally {
-    statsTokenBusy.value = false
-    statsTokenConfirm.value = null
-  }
+// Server-side credentials are shown once by KeyTokenField; reload the key so
+// the display prefix it falls back to is current.
+async function reloadKey() {
+  key.value = await keysStore.getKey(keyId.value)
 }
 
 async function toggleEnabled() {
@@ -203,31 +178,32 @@ const hisTotals = computed(() => ({
         </div>
         <div class="md:col-span-2">
           <dt class="text-sm font-medium text-muted">Stats token</dt>
-          <dd class="mt-1">
-            <div v-if="newStatsToken" class="flex flex-wrap items-center gap-2">
-              <code class="text-sm bg-sunken px-2 py-1 rounded font-mono break-all">{{ newStatsToken }}</code>
-              <CopyButton :value="newStatsToken" label="Copy stats token" />
-            </div>
-            <div v-else class="flex flex-wrap items-center gap-2">
-              <code v-if="key.stats_token_display" class="text-sm bg-sunken px-2 py-1 rounded font-mono">{{ key.stats_token_display }}…</code>
-              <span v-else class="text-sm text-ink-2">None</span>
-              <button
-                v-if="!key.stats_token_display"
-                @click="issueStatsToken"
-                :disabled="statsTokenBusy"
-                class="inline-flex min-h-8 items-center px-2 text-xs font-semibold text-link hover:text-link-hover"
-              >Generate</button>
-              <template v-else>
-                <button @click="statsTokenConfirm = 'reissue'" class="inline-flex min-h-8 items-center px-2 text-xs text-link hover:text-link-hover">Regenerate</button>
-                <button @click="statsTokenConfirm = 'revoke'" class="inline-flex min-h-8 items-center px-2 text-xs font-semibold text-fail hover:text-ink">Revoke</button>
-              </template>
-            </div>
-            <p class="mt-1 text-xs text-muted">
-              <template v-if="newStatsToken">Copy it now: it is not shown again.</template>
-              Read-only access to this key's statistics through <code class="font-mono">GET /api/v1/stats</code>,
-              for the WordPress plugin or your own backend. Keep it server-side.
-            </p>
-          </dd>
+          <KeyTokenField
+            label="Stats token"
+            :display="key.stats_token_display"
+            :issue="() => keysStore.issueStatsToken(keyId)"
+            :revoke="() => keysStore.revokeStatsToken(keyId)"
+            consequence="Verifications are not affected. Whatever reads statistics with the current token stops working until it is given"
+            @changed="reloadKey"
+          >
+            Read-only access to this key's statistics through <code class="font-mono">GET /api/v1/stats</code>,
+            for the WordPress plugin or your own backend. Keep it server-side.
+          </KeyTokenField>
+        </div>
+        <div class="md:col-span-2">
+          <dt class="text-sm font-medium text-muted">Verify secret</dt>
+          <KeyTokenField
+            label="Verify secret"
+            :display="key.verify_secret_display"
+            :issue="() => keysStore.issueVerifySecret(keyId)"
+            :revoke="() => keysStore.revokeVerifySecret(keyId)"
+            consequence="Verifications keep working. A backend still sending the current secret has its client_ip ignored, so its visitors share one rate-limit bucket again, until it is given"
+            @changed="reloadKey"
+          >
+            For a backend calling <code class="font-mono">POST /api/v1/verify</code> itself: sent as
+            <code class="font-mono">Authorization: Bearer</code>, it lets that backend report the visitor's address in
+            <code class="font-mono">client_ip</code>, so each visitor gets their own rate limit and country. Keep it server-side.
+          </KeyTokenField>
         </div>
         <div>
           <dt class="text-sm font-medium text-muted">Domains</dt>
@@ -352,19 +328,6 @@ const hisTotals = computed(() => ({
       :observations="hisTotals.observations"
     />
 
-
-    <ConfirmDialog
-      :open="statsTokenConfirm !== null"
-      :title="statsTokenConfirm === 'revoke' ? 'Revoke stats token?' : 'Regenerate stats token?'"
-      :confirm-label="statsTokenConfirm === 'revoke' ? 'Revoke' : 'Regenerate'"
-      :tone="statsTokenConfirm === 'revoke' ? 'danger' : 'primary'"
-      :busy="statsTokenBusy"
-      @cancel="statsTokenConfirm = null"
-      @confirm="statsTokenConfirm === 'revoke' ? revokeStatsToken() : issueStatsToken()"
-    >
-      Whatever reads statistics with the current token stops working until it is given
-      {{ statsTokenConfirm === 'revoke' ? 'a new one' : 'the new one' }}. Verifications are not affected.
-    </ConfirmDialog>
 
     <ConfirmDialog
       :open="showDeleteConfirm"

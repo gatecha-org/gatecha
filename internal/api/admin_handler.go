@@ -360,40 +360,65 @@ func (h *AdminHandler) RotateSecret(w http.ResponseWriter, r *http.Request) {
 // Issues the key's read-only stats token, replacing any previous one. The
 // secret is in this response and nowhere else afterwards.
 func (h *AdminHandler) IssueStatsToken(w http.ResponseWriter, r *http.Request) {
-	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
-	if err != nil {
-		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errInvalidKeyID})
-		return
-	}
-
-	token, err := models.IssueStatsToken(h.DB, id)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		writeJSON(w, http.StatusNotFound, map[string]string{"error": errKeyNotFound})
-		return
-	}
-	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue stats token"})
-		return
-	}
-
-	writeJSON(w, http.StatusOK, map[string]string{"stats_token": token})
+	h.issueKeyToken(w, r, models.IssueStatsToken, "stats_token")
 }
 
 // DELETE /api/admin/keys/{id}/stats-token
 func (h *AdminHandler) RevokeStatsToken(w http.ResponseWriter, r *http.Request) {
+	h.revokeKeyToken(w, r, models.RevokeStatsToken, "stats token")
+}
+
+// POST /api/admin/keys/{id}/verify-secret
+//
+// Issues the key's server-side verify secret, replacing any previous one. A
+// backend presenting it on POST /verify may report the visitor's address in
+// `client_ip`. The secret is in this response and nowhere else afterwards.
+func (h *AdminHandler) IssueVerifySecret(w http.ResponseWriter, r *http.Request) {
+	h.issueKeyToken(w, r, models.IssueVerifySecret, "verify_secret")
+}
+
+// DELETE /api/admin/keys/{id}/verify-secret
+func (h *AdminHandler) RevokeVerifySecret(w http.ResponseWriter, r *http.Request) {
+	h.revokeKeyToken(w, r, models.RevokeVerifySecret, "verify secret")
+}
+
+// issueKeyToken serves the issue endpoint of a per-key credential, returning
+// the new secret under field.
+func (h *AdminHandler) issueKeyToken(w http.ResponseWriter, r *http.Request, issue func(*gorm.DB, int64) (string, error), field string) {
 	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errInvalidKeyID})
 		return
 	}
 
-	err = models.RevokeStatsToken(h.DB, id)
+	secret, err := issue(h.DB, id)
 	if errors.Is(err, gorm.ErrRecordNotFound) {
 		writeJSON(w, http.StatusNotFound, map[string]string{"error": errKeyNotFound})
 		return
 	}
 	if err != nil {
-		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to revoke stats token"})
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to issue " + strings.ReplaceAll(field, "_", " ")})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{field: secret})
+}
+
+// revokeKeyToken serves the revoke endpoint of a per-key credential.
+func (h *AdminHandler) revokeKeyToken(w http.ResponseWriter, r *http.Request, revoke func(*gorm.DB, int64) error, label string) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]string{"error": errInvalidKeyID})
+		return
+	}
+
+	err = revoke(h.DB, id)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		writeJSON(w, http.StatusNotFound, map[string]string{"error": errKeyNotFound})
+		return
+	}
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "failed to revoke " + label})
 		return
 	}
 

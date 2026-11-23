@@ -18,6 +18,8 @@ export interface APIKey {
   his_threshold: number
   /** Leading characters of the key's stats token, empty when none is issued. */
   stats_token_display: string
+  /** Leading characters of the key's verify secret, empty when none is issued. */
+  verify_secret_display: string
   enabled: boolean
   created_at: string
   updated_at: string
@@ -36,6 +38,16 @@ async function issueStatsToken(id: number) {
 
 async function revokeStatsToken(id: number) {
   await api.delete(`/keys/${id}/stats-token`)
+}
+
+/** Issues (or replaces) the key's verify secret; the secret is returned only here. */
+async function issueVerifySecret(id: number) {
+  const { data } = await api.post(`/keys/${id}/verify-secret`)
+  return data.verify_secret as string
+}
+
+async function revokeVerifySecret(id: number) {
+  await api.delete(`/keys/${id}/verify-secret`)
 }
 
 export const useApiKeysStore = defineStore('apikeys', () => {
@@ -74,5 +86,5 @@ export const useApiKeysStore = defineStore('apikeys', () => {
     await fetchKeys()
   }
 
-  return { keys, loading, fetchKeys, createKey, getKey, updateKey, deleteKey, rotateSecret, issueStatsToken, revokeStatsToken }
+  return { keys, loading, fetchKeys, createKey, getKey, updateKey, deleteKey, rotateSecret, issueStatsToken, revokeStatsToken, issueVerifySecret, revokeVerifySecret }
 })

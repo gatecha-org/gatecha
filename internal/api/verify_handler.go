@@ -28,6 +28,10 @@ type verifyRequest struct {
 	// only on a key that has explicitly opted into HIS enforcement; otherwise
 	// the score is reported and nothing else.
 	HISSignals *his.Signals `json:"his_signals,omitempty"`
+	// The body may also carry `client_ip`, the visitor's address reported by a
+	// site backend. It is read and validated by TrustedClientIPMiddleware only,
+	// and deliberately not declared here: a typed field would make this
+	// decoder reject a non-string value with a 400 instead of ignoring it.
 }
 
 type verifyResponse struct {
@@ -72,8 +76,9 @@ func (h *VerifyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	slog.Debug("verify request", "api_key_id", key.ID, "key_id", key.KeyID)
 
 	// Resolve the source country once, then discard the IP. Used only for the
-	// aggregated per-country breakdown; the raw address is never stored.
-	country := geo.Country(clientIP(r))
+	// aggregated per-country breakdown; the raw address is never stored. The
+	// source is the visitor when a trusted backend reported one.
+	country := geo.Country(sourceIP(r))
 
 	var req verifyRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
