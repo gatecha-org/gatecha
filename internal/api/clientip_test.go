@@ -123,6 +123,14 @@ func TestVerifySecret_BodyStillReachesHandler(t *testing.T) {
 	if !strings.Contains(w.Body.String(), "missing payload") {
 		t.Errorf("handler did not see the body: %d %s", w.Code, w.Body.String())
 	}
+	// A client_ip of the wrong type is ignored, with or without the secret,
+	// never a reason to reject the verification.
+	for _, sec := range []string{secret, ""} {
+		w = verifyFromBackend(router, key.KeyID, sec, `{"payload":"x","client_ip":42}`)
+		if w.Code != http.StatusOK || !strings.Contains(w.Body.String(), "invalid payload") {
+			t.Errorf("non-string client_ip (secret %v): expected the payload to be checked, got %d %s", sec != "", w.Code, w.Body.String())
+		}
+	}
 	w = verifyFromBackend(router, key.KeyID, secret, `not json`)
 	if w.Code != http.StatusBadRequest {
 		t.Errorf("malformed body: expected 400 from the handler, got %d", w.Code)

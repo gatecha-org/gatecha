@@ -153,14 +153,20 @@ resp = requests.post(
   request and walk around the limiter.
 - **A wrong, replaced or revoked secret does not fail the verification.**
   `client_ip` is ignored, the request is counted against your server's address as
-  before, and GateCHA logs a warning. Regenerating the secret therefore never takes
-  your forms down; it only brings back the shared bucket until the backend is updated.
+  before, and GateCHA logs a warning. Regenerating the secret is therefore not an
+  instant outage, but until the backend has the new one the site is back on the
+  shared bucket, and a busy form can see `429`s again. Update the backend right
+  after regenerating.
 - **The address is used and discarded.** It feeds the rate limiter and the country
   lookup, and is never stored nor logged. A value that is not an IPv4 or IPv6
   address is ignored.
-- **Take `visitor_ip` from where your own stack puts it.** Behind a reverse proxy
-  that is usually a forwarded header your framework already resolves, not the raw
-  socket address.
+- **Take `visitor_ip` from where your own stack puts it, and only from a proxy
+  you trust.** Behind a reverse proxy that is usually a forwarded header
+  (`X-Forwarded-For`, `X-Real-IP`). Accept it only from your own proxy, and have
+  that proxy overwrite the header rather than append to what the client sent:
+  otherwise a visitor forges a new address on every request, your backend vouches
+  for it with the secret, and the per-visitor limit is gone. Without a proxy, use
+  the socket address.
 
 ### 4. Optional: collect interaction signals (HIS)
 

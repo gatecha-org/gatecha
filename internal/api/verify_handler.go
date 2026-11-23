@@ -28,10 +28,10 @@ type verifyRequest struct {
 	// only on a key that has explicitly opted into HIS enforcement; otherwise
 	// the score is reported and nothing else.
 	HISSignals *his.Signals `json:"his_signals,omitempty"`
-	// ClientIP is the visitor's address, reported by a site backend. It is
-	// read by TrustedClientIPMiddleware, honoured only with the key's verify
-	// secret, and listed here so the request shape is documented in one place.
-	ClientIP string `json:"client_ip,omitempty"`
+	// The body may also carry `client_ip`, the visitor's address reported by a
+	// site backend. It is read and validated by TrustedClientIPMiddleware only,
+	// and deliberately not declared here: a typed field would make this
+	// decoder reject a non-string value with a 400 instead of ignoring it.
 }
 
 type verifyResponse struct {

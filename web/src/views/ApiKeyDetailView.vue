@@ -176,31 +176,35 @@ const hisTotals = computed(() => ({
             <CopyButton :value="instanceOrigin" label="Copy instance URL" />
           </dd>
         </div>
-        <KeyTokenField
-          class="md:col-span-2"
-          label="Stats token"
-          :display="key.stats_token_display"
-          :issue="() => keysStore.issueStatsToken(keyId)"
-          :revoke="() => keysStore.revokeStatsToken(keyId)"
-          consequence="Verifications are not affected. Whatever reads statistics with the current token stops working until it is given"
-          @changed="reloadKey"
-        >
-          Read-only access to this key's statistics through <code class="font-mono">GET /api/v1/stats</code>,
-          for the WordPress plugin or your own backend. Keep it server-side.
-        </KeyTokenField>
-        <KeyTokenField
-          class="md:col-span-2"
-          label="Verify secret"
-          :display="key.verify_secret_display"
-          :issue="() => keysStore.issueVerifySecret(keyId)"
-          :revoke="() => keysStore.revokeVerifySecret(keyId)"
-          consequence="Verifications keep working. A backend still sending the current secret has its client_ip ignored, so its visitors share one rate-limit bucket again, until it is given"
-          @changed="reloadKey"
-        >
-          For a backend calling <code class="font-mono">POST /api/v1/verify</code> itself: sent as
-          <code class="font-mono">Authorization: Bearer</code>, it lets that backend report the visitor's address in
-          <code class="font-mono">client_ip</code>, so each visitor gets their own rate limit and country. Keep it server-side.
-        </KeyTokenField>
+        <div class="md:col-span-2">
+          <dt class="text-sm font-medium text-muted">Stats token</dt>
+          <KeyTokenField
+            label="Stats token"
+            :display="key.stats_token_display"
+            :issue="() => keysStore.issueStatsToken(keyId)"
+            :revoke="() => keysStore.revokeStatsToken(keyId)"
+            consequence="Verifications are not affected. Whatever reads statistics with the current token stops working until it is given"
+            @changed="reloadKey"
+          >
+            Read-only access to this key's statistics through <code class="font-mono">GET /api/v1/stats</code>,
+            for the WordPress plugin or your own backend. Keep it server-side.
+          </KeyTokenField>
+        </div>
+        <div class="md:col-span-2">
+          <dt class="text-sm font-medium text-muted">Verify secret</dt>
+          <KeyTokenField
+            label="Verify secret"
+            :display="key.verify_secret_display"
+            :issue="() => keysStore.issueVerifySecret(keyId)"
+            :revoke="() => keysStore.revokeVerifySecret(keyId)"
+            consequence="Verifications keep working. A backend still sending the current secret has its client_ip ignored, so its visitors share one rate-limit bucket again, until it is given"
+            @changed="reloadKey"
+          >
+            For a backend calling <code class="font-mono">POST /api/v1/verify</code> itself: sent as
+            <code class="font-mono">Authorization: Bearer</code>, it lets that backend report the visitor's address in
+            <code class="font-mono">client_ip</code>, so each visitor gets their own rate limit and country. Keep it server-side.
+          </KeyTokenField>
+        </div>
         <div>
           <dt class="text-sm font-medium text-muted">Domains</dt>
           <dd class="mt-1 text-sm text-ink">
